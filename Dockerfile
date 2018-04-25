@@ -1,28 +1,49 @@
 FROM ubuntu:16.04
 
-# Set Virtuoso commit SHA to Virtuoso 7.2.4 release (25/04/2016)
-ENV VIRTUOSO_COMMIT 96055f6a70a92c3098a7e786592f4d8ba8aae214
+ENV VIRTUOSO_VERSION=7.2.4.2
+ENV VIRTUOSO_SOURCE=https://github.com/openlink/virtuoso-opensource/releases/download/v$VIRTUOSO_VERSION/virtuoso-opensource-$VIRTUOSO_VERSION.tar.gz
 
-# Build virtuoso from source and clean up afterwards
-RUN apt-get update \
-        && apt-get install -y build-essential autotools-dev autoconf automake unzip wget net-tools libtool flex bison gperf gawk m4 libssl-dev libreadline-dev openssl crudini \
-        && wget https://github.com/openlink/virtuoso-opensource/archive/${VIRTUOSO_COMMIT}.zip \
-        && unzip ${VIRTUOSO_COMMIT}.zip \
-        && rm ${VIRTUOSO_COMMIT}.zip \
-        && cd virtuoso-opensource-${VIRTUOSO_COMMIT} \
+RUN \
+        # install runtime dependencies
+        apt-get update \
+        && apt-get install -y openssl crudini \
+
+        # remember installed packages for later cleanup
+        && dpkg --get-selections > /inst_packages.dpkg \
+
+        # install build dependencies
+        && apt-get install -y build-essential autotools-dev autoconf automake unzip wget net-tools libtool flex bison gperf gawk m4 libssl-dev libreadline-dev zlib1g-dev libbz2-dev openssl crudini \
+
+        # download and extract virtuoso source
+        && echo -n "downloading..." \
+        && wget -nv "$VIRTUOSO_SOURCE" \
+        && echo " done." \
+        && echo -n "extracting..." \
+        && tar -xaf virtuoso*.tar* \
+        && rm virtuoso*.tar* \
+        && echo " done." \
+
+        # build virtuoso
+        && cd virtuoso-opensource-*/ \
         && ./autogen.sh \
-        && export CFLAGS="-O2 -m64" && ./configure --disable-bpel-vad --enable-conductor-vad --enable-fct-vad --disable-dbpedia-vad --disable-demo-vad --disable-isparql-vad --disable-ods-vad --disable-sparqldemo-vad --disable-syncml-vad --disable-tutorial-vad --with-readline --program-transform-name="s/isql/isql-v/" \
+        && export CFLAGS="-O2 -m64" && ./configure --prefix=/opt/virtuoso --disable-bpel-vad --enable-conductor-vad --enable-fct-vad --disable-dbpedia-vad --disable-demo-vad --enable-isparql-vad --enable-ods-vad --enable-rdfmappers-vad --enable-rdb2rdf-vad --disable-sparqldemo-vad --enable-syncml-vad --disable-tutorial-vad --with-readline --without-internal-zlib --program-transform-name="s/isql/isql-v/" \
         && make && make install \
-        && ln -s /usr/local/virtuoso-opensource/var/lib/virtuoso/ /var/lib/virtuoso \
-        && ln -s /var/lib/virtuoso/db /data \
+        && ln -s /opt/virtuoso/var/lib/virtuoso/db /db \
         && cd .. \
-        && rm -r /virtuoso-opensource-${VIRTUOSO_COMMIT} \
-        && apt remove --purge -y build-essential autotools-dev autoconf automake unzip wget net-tools libtool flex bison gperf gawk m4 libssl-dev libreadline-dev \
-        && apt autoremove -y \
-        && apt autoclean
+        && rm -r /virtuoso-opensource-* \
+
+        # cleanup packages and caches for building virtuoso (reduce container size)
+        && dpkg --clear-selections \
+        && dpkg --set-selections < /inst_packages.dpkg \
+        && rm /inst_packages.dpkg \
+        && rm -rf /var/lib/apt/lists/* \
+        && apt-get -y dselect-upgrade \
+
+        # allow virtuoso to access the /import DIR in container
+        && sed -i '/^DirsAllowed\s*=/ s_\s*$_, /import_' /db/virtuoso.ini
 
 # Add Virtuoso bin to the PATH
-ENV PATH /usr/local/virtuoso-opensource/bin/:$PATH
+ENV PATH /opt/virtuoso/bin:$PATH
 
 # Add Virtuoso config
 COPY virtuoso.ini /virtuoso.ini
@@ -36,9 +57,10 @@ COPY clean-logs.sh /clean-logs.sh
 # Add startup script
 COPY virtuoso.sh /virtuoso.sh
 
-VOLUME /data
-WORKDIR /data
-EXPOSE 8890
-EXPOSE 1111
+WORKDIR /db
+
+VOLUME /db /import
+
+EXPOSE 1111 8890
 
 CMD ["/bin/bash", "/virtuoso.sh"]
