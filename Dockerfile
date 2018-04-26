@@ -12,7 +12,7 @@ RUN \
         && dpkg --get-selections > /inst_packages.dpkg \
 
         # install build dependencies
-        && apt-get install -y build-essential autotools-dev autoconf automake unzip wget net-tools libtool flex bison gperf gawk m4 libssl-dev libreadline-dev zlib1g-dev libbz2-dev openssl crudini \
+        && apt-get install -y build-essential autotools-dev autoconf automake unzip wget net-tools libtool flex bison gperf gawk m4 libssl-dev libreadline-dev zlib1g-dev libbz2-dev \
 
         # download and extract virtuoso source
         && echo "downloading..." \
@@ -49,6 +49,6 @@ WORKDIR /db
 
 VOLUME /conf /db /import
 
-EXPOSE 1111 8890
+EXPOSE 1111 8880 8890
 
 CMD ["virtuoso-t", "+wait", "+foreground", "+configfile", "/conf/virtuoso.ini"]
