@@ -6,7 +6,7 @@ ENV VIRTUOSO_SOURCE=https://github.com/openlink/virtuoso-opensource/releases/dow
 RUN \
         # install runtime dependencies
         apt-get update \
-        && apt-get install -y openssl crudini \
+        && apt-get install -y openssl \
 
         # remember installed packages for later cleanup
         && dpkg --get-selections > /inst_packages.dpkg \
@@ -15,13 +15,11 @@ RUN \
         && apt-get install -y build-essential autotools-dev autoconf automake unzip wget net-tools libtool flex bison gperf gawk m4 libssl-dev libreadline-dev zlib1g-dev libbz2-dev openssl crudini \
 
         # download and extract virtuoso source
-        && echo -n "downloading..." \
-        && wget -nv "$VIRTUOSO_SOURCE" \
-        && echo " done." \
-        && echo -n "extracting..." \
+        && echo "downloading..." \
+        && wget "$VIRTUOSO_SOURCE" \
+        && echo "extracting..." \
         && tar -xaf virtuoso*.tar* \
         && rm virtuoso*.tar* \
-        && echo " done." \
 
         # build virtuoso
         && cd virtuoso-opensource-*/ \
@@ -29,6 +27,8 @@ RUN \
         && export CFLAGS="-O2 -m64" && ./configure --prefix=/opt/virtuoso --disable-bpel-vad --enable-conductor-vad --enable-fct-vad --disable-dbpedia-vad --disable-demo-vad --enable-isparql-vad --enable-ods-vad --enable-rdfmappers-vad --enable-rdb2rdf-vad --disable-sparqldemo-vad --enable-syncml-vad --disable-tutorial-vad --with-readline --without-internal-zlib --program-transform-name="s/isql/isql-v/" \
         && make && make install \
         && ln -s /opt/virtuoso/var/lib/virtuoso/db /db \
+        && mkdir /conf /import \
+        && mv /db/virtuoso.ini /conf \
         && cd .. \
         && rm -r /virtuoso-opensource-* \
 
@@ -40,27 +40,15 @@ RUN \
         && apt-get -y dselect-upgrade \
 
         # allow virtuoso to access the /import DIR in container
-        && sed -i '/^DirsAllowed\s*=/ s_\s*$_, /import_' /db/virtuoso.ini
+        && sed -i '/^DirsAllowed\s*=/ s_\s*$_, /import_' /conf/virtuoso.ini
 
 # Add Virtuoso bin to the PATH
 ENV PATH /opt/virtuoso/bin:$PATH
 
-# Add Virtuoso config
-COPY virtuoso.ini /virtuoso.ini
-
-# Add dump_nquads_procedure
-COPY dump_nquads_procedure.sql /dump_nquads_procedure.sql
-
-# Add Virtuoso log cleaning script
-COPY clean-logs.sh /clean-logs.sh
-
-# Add startup script
-COPY virtuoso.sh /virtuoso.sh
-
 WORKDIR /db
 
-VOLUME /db /import
+VOLUME /conf /db /import
 
 EXPOSE 1111 8890
 
-CMD ["/bin/bash", "/virtuoso.sh"]
+CMD ["virtuoso-t", "+wait", "+foreground", "+configfile", "/conf/virtuoso.ini"]
