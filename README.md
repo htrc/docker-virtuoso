@@ -37,4 +37,5 @@ Note:
         -p 8080:8890 -p 1111:1111 \
         -d htrc/virtuoso:latest
 
-The Docker image exposes ports 8080 and 1111.
+The above example commands expose port 8080 and 1111 to the host, on all network interfaces.
+To have Docker only expose these ports to `localhost` (so they can't be accessed from outside), use `-p localhost:8080:8890` and `-p localhost:1111:1111`.
